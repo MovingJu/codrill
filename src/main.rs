@@ -38,6 +38,17 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn cmd_start(cwd: &Path, source: &str) -> anyhow::Result<()> {
+    // 이미 진행 중인 게 있으면 덮어쓰기 전에 알린다 -- 그냥 새로 클론해버리면
+    // 이전 작업 디렉토리가 state에서 끊겨 고아가 된다(작업 내용 유실처럼 보임).
+    if let Ok(prev) = state::load(cwd) {
+        anyhow::bail!(
+            "이미 '{}' 시나리오가 진행 중입니다 ({}).\n\
+             계속하려면 그 폴더에서 작업하시고, 새로 시작하려면 .codrill/state.toml을 지우세요.",
+            prev.active,
+            prev.repo_path.display()
+        );
+    }
+
     // 폴더 이름은 일단 source의 마지막 조각으로 추정, codrill.toml 읽은 뒤 name으로 검증만.
     let guessed_name = source
         .trim_end_matches('/')
@@ -49,14 +60,26 @@ fn cmd_start(cwd: &Path, source: &str) -> anyhow::Result<()> {
 
     println!("클론 중: {source} -> {}", dest.display());
     git::clone(source, &dest)?;
-    git::checkout(&dest, "start")?;
 
-    let manifest = manifest::load(&dest)
-        .context("codrill.toml이 없거나 형식이 잘못됐습니다 -- 이 저장소가 codrill 시나리오가 맞는지 확인하세요")?;
+    // 여기부터 실패하면 방금 클론한 폴더는 쓰레기로 남으므로, 실패시 지우고 나간다.
+    let prepared = (|| -> anyhow::Result<(manifest::Manifest, String)> {
+        git::checkout(&dest, "start")?;
+        let manifest = manifest::load(&dest).context(
+            "codrill.toml이 없거나 형식이 잘못됐습니다 -- 이 저장소가 codrill 시나리오가 맞는지 확인하세요",
+        )?;
+        let briefing_path = dest.join("BRIEF.md");
+        let briefing = std::fs::read_to_string(&briefing_path)
+            .with_context(|| format!("BRIEF.md이 없습니다: {}", briefing_path.display()))?;
+        Ok((manifest, briefing))
+    })();
 
-    let briefing_path = dest.join("BRIEF.md");
-    let briefing = std::fs::read_to_string(&briefing_path)
-        .with_context(|| format!("BRIEF.md이 없습니다: {}", briefing_path.display()))?;
+    let (manifest, briefing) = match prepared {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&dest); // 실패했으니 클론 흔적 정리
+            return Err(e);
+        }
+    };
 
     state::save(
         cwd,
@@ -141,7 +164,17 @@ fn cmd_grade(cwd: &Path) -> anyhow::Result<()> {
     let status = std::process::Command::new(&verify_path)
         .current_dir(&st.repo_path)
         .status()
-        .with_context(|| format!("verify/run 실행 실패: {}", verify_path.display()))?;
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                anyhow::anyhow!(
+                    "verify/run에 실행 권한이 없습니다: {}\n\
+                     시나리오 제작자라면 `chmod +x verify/run` 후 커밋하세요.",
+                    verify_path.display()
+                )
+            } else {
+                anyhow::anyhow!("verify/run 실행 실패 ({}): {e}", verify_path.display())
+            }
+        })?;
 
     if status.success() {
         println!("PASS — 통과했습니다.");
