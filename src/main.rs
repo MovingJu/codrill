@@ -21,6 +21,8 @@ enum Commands {
     Hint,
     /// 정답 공개 (solution 브랜치로 체크아웃)
     Reveal,
+    /// verify/run 실행해서 통과 여부 확인
+    Grade,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -31,6 +33,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Start { source } => cmd_start(&cwd, &source),
         Commands::Hint => cmd_hint(&cwd),
         Commands::Reveal => cmd_reveal(&cwd),
+        Commands::Grade => cmd_grade(&cwd),
     }
 }
 
@@ -51,9 +54,9 @@ fn cmd_start(cwd: &Path, source: &str) -> anyhow::Result<()> {
     let manifest = manifest::load(&dest)
         .context("codrill.toml이 없거나 형식이 잘못됐습니다 -- 이 저장소가 codrill 시나리오가 맞는지 확인하세요")?;
 
-    let briefing_path = dest.join("BRIEFING.md");
+    let briefing_path = dest.join("BRIEF.md");
     let briefing = std::fs::read_to_string(&briefing_path)
-        .with_context(|| format!("BRIEFING.md이 없습니다: {}", briefing_path.display()))?;
+        .with_context(|| format!("BRIEF.md이 없습니다: {}", briefing_path.display()))?;
 
     state::save(
         cwd,
@@ -103,6 +106,10 @@ fn cmd_hint(cwd: &Path) -> anyhow::Result<()> {
 
 fn cmd_reveal(cwd: &Path) -> anyhow::Result<()> {
     let st = state::load(cwd)?;
+    let stashed = git::stash_if_dirty(&st.repo_path)?;
+    if stashed {
+        println!("커밋 안 된 변경사항을 stash에 보관했습니다 -- 나중에 `git stash pop`으로 복구하세요.");
+    }
     git::checkout(&st.repo_path, "solution")?;
 
     let solution_path = st.repo_path.join("SOLUTION.md");
@@ -116,5 +123,33 @@ fn cmd_reveal(cwd: &Path) -> anyhow::Result<()> {
     println!("=== 정답 공개 ===");
     println!();
     println!("{solution}");
+    Ok(())
+}
+
+fn cmd_grade(cwd: &Path) -> anyhow::Result<()> {
+    let st = state::load(cwd)?;
+    let verify_path = st.repo_path.join("verify").join("run");
+
+    if !verify_path.exists() {
+        anyhow::bail!(
+            "verify/run이 없습니다: {} -- 이 시나리오엔 자동 채점이 없습니다",
+            verify_path.display()
+        );
+    }
+
+    println!("verify/run 실행 중...");
+    let status = std::process::Command::new(&verify_path)
+        .current_dir(&st.repo_path)
+        .status()
+        .with_context(|| format!("verify/run 실행 실패: {}", verify_path.display()))?;
+
+    if status.success() {
+        println!("PASS — 통과했습니다.");
+    } else {
+        println!(
+            "FAIL — 아직 통과 못했습니다 (exit code {}).",
+            status.code().unwrap_or(-1)
+        );
+    }
     Ok(())
 }
