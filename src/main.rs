@@ -63,7 +63,7 @@ fn cmd_start(cwd: &Path, source: &str) -> anyhow::Result<()> {
 
     // 여기부터 실패하면 방금 클론한 폴더는 쓰레기로 남으므로, 실패시 지우고 나간다.
     let prepared = (|| -> anyhow::Result<(manifest::Manifest, String)> {
-        git::checkout(&dest, "start")?;
+        git::checkout(&dest, "main")?;
         let manifest = manifest::load(&dest).context(
             "codrill.toml이 없거나 형식이 잘못됐습니다 -- 이 저장소가 codrill 시나리오가 맞는지 확인하세요",
         )?;
