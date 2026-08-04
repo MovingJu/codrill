@@ -8,8 +8,9 @@ git 저장소 하나로 받아서, 실제로 조사하고 고쳐보는 도구.
 ```bash
 # 빈 폴더에서 시작 -- 시나리오 파일이 지금 폴더에 바로 풀린다
 mkdir my-attempt && cd my-attempt
-codrill start https://github.com/누군가/시나리오.git   # git 주소도, 로컬 경로도 그대로 됨
-# 예: codrill start ../codrill-scenario-incident-1
+codrill start https://github.com/누군가/시나리오.git   # 원격은 위치 인자로
+# 로컬 경로로 시작할 땐 반드시 --path (위치 인자와 동시에 못 씀)
+codrill start --path ../codrill-scenario-incident-1
 
 # ... 평소 하던 대로 조사/수정 ...
 codrill hint                            # 막히면 힌트 (HINTS.md, 하나씩 순서대로)
