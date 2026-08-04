@@ -146,11 +146,11 @@ fn cmd_start(
         // 저장소 밖이라 git이 신경 쓸 필요가 없다.
         if codrill_dir.starts_with(&dest) {
             let exclude_path = dest.join(".git").join("info").join("exclude");
-            if let Ok(mut existing) = std::fs::read_to_string(&exclude_path) {
-                if !existing.contains(".codrill/") {
-                    existing.push_str("\n.codrill/\n");
-                    std::fs::write(&exclude_path, existing)?;
-                }
+            if let Ok(mut existing) = std::fs::read_to_string(&exclude_path)
+                && !existing.contains(".codrill/")
+            {
+                existing.push_str("\n.codrill/\n");
+                std::fs::write(&exclude_path, existing)?;
             }
         }
 
@@ -193,6 +193,9 @@ fn cmd_start(
         "[{} / {}]",
         manifest.scenario.category, manifest.scenario.difficulty
     );
+    if !manifest.scenario.tags.is_empty() {
+        println!("tags: {}", manifest.scenario.tags.join(", "));
+    }
     println!();
     println!("{briefing}");
     println!("---");
