@@ -7,7 +7,18 @@ use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
-#[command(name = "codrill", about = "실전처럼 코드를 읽고 대처하는 연습용 CLI")]
+#[command(
+    name = "codrill",
+    about = "실전처럼 코드를 읽고 대처하는 연습용 CLI",
+    long_about = "실전처럼 코드를 읽고 대처하는 연습용 CLI.\n\n\
+        장애 대응, 코드 리뷰, 보안 취약점 같은 상황을 git 저장소 하나(시나리오)로 받아서,\n\
+        실제로 그 코드를 열어보고 조사하고 고쳐보는 도구입니다.\n\n\
+        기본 흐름:\n  \
+        1) codrill start <시나리오>   -- 받아서 상황 설명(BRIEF.md) 확인\n  \
+        2) 평소 하던 대로 코드를 조사/수정\n  \
+        3) 막히면 codrill hint, 다 풀었으면 codrill grade\n  \
+        4) 답이 궁금하면 codrill reveal"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -15,14 +26,23 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// 시나리오 시작 (git 주소 또는 로컬 경로)
+    /// 시나리오 시작 -- git 주소든 로컬 경로든 그대로 넣으면 됩니다
+    #[command(long_about = "\
+시나리오를 받아서 현재 폴더에 풉니다. SOURCE 자리엔 아래 둘 다 됩니다:\n\n  \
+  - git 원격 주소:  codrill start https://github.com/누군가/시나리오.git\n  \
+  - 로컬 경로:      codrill start ../내가-만든-시나리오\n\n\
+(내부적으로 `git clone <SOURCE> .`를 쓰기 때문에, 로컬 경로여도 실제 git 저장소여야 합니다.\n\
+아직 커밋 안 한 변경사항은 안 딸려오니, 로컬 시나리오를 만드는 중이면 커밋부터 하고 시작하세요.)\n\n\
+기본은 지금 있는 폴더에 파일이 바로 풀립니다 -- 그래서 빈 폴더에서 실행하는 게 정상입니다.\n\
+이미 뭔가 들어있는 폴더에서 시작하고 싶으면 -o로 하위 폴더 이름을 지정하세요.")]
     Start {
+        /// git 원격 주소(https://... / git@...) 또는 로컬 git 저장소 경로
         source: String,
-        /// 현재 폴더에 바로 풀지 않고 이 이름의 하위 폴더를 만들어 그 안에 클론
-        #[arg(short = 'o', long = "into")]
+        /// 지금 폴더에 바로 풀지 않고, 이 이름의 하위 폴더를 새로 만들어 그 안에 클론
+        #[arg(short = 'o', long = "into", value_name = "폴더명")]
         into: Option<String>,
     },
-    /// 힌트 하나 공개
+    /// 힌트 하나 공개 (다시 숨길 방법은 없음 -- 신중히)
     Hint,
     /// 정답 공개 (.codrill/SOLUTION.md 출력)
     Reveal,
