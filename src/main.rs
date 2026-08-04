@@ -117,11 +117,19 @@ fn cmd_start(
         None => cwd.to_path_buf(),
     };
 
+    // "빈 폴더가 아니라 클론이 안 됐다"는 힌트는 실제로 dest가 비어있지 않을 때만 붙인다.
+    // dest가 비어있는데도 이 힌트를 무조건 붙이면(예전 버그), 진짜 원인(소스 경로가 틀렸다든지
+    // 네트워크 문제든지)을 가려버리고 엉뚱한 데를 보게 만든다.
+    let dest_nonempty = into.is_none()
+        && std::fs::read_dir(&dest)
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false);
+
     println!("클론 중: {source} -> {}", dest.display());
     git::clone(source, &dest).map_err(|e| {
-        if into.is_none() {
+        if dest_nonempty {
             e.context(
-                "현재 폴더가 비어있지 않으면 여기 바로 풀 수 없습니다 -- \
+                "현재 폴더가 비어있지 않아서 여기 바로 풀 수 없습니다 -- \
                  빈 폴더에서 실행하거나 `-o <이름>`으로 하위 폴더에 클론하세요.",
             )
         } else {
