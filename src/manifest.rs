@@ -13,8 +13,6 @@ pub struct ScenarioMeta {
     pub category: String,
     pub difficulty: Difficulty,
     #[serde(default)]
-    pub hints: Vec<String>,
-    #[serde(default)]
     pub tags: Vec<String>,
 }
 
