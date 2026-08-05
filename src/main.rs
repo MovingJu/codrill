@@ -74,6 +74,21 @@ fn codrill_dir(cwd: &Path) -> PathBuf {
     cwd.join(".codrill")
 }
 
+/// dir 자체는 남기고 그 안의 항목만 전부 지운다. dir이 사용자 셸의 cwd일 수 있는 상황에서
+/// (예: `codrill start`가 -o 없이 지금 폴더에 바로 풀다가 실패한 뒤 되돌릴 때)
+/// `remove_dir_all(dir)`을 쓰면 셸이 삭제된 디렉터리 안에 남아 이후 명령이 깨진다.
+fn clear_dir_contents(dir: &Path) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            std::fs::remove_dir_all(&path)?;
+        } else {
+            std::fs::remove_file(&path)?;
+        }
+    }
+    Ok(())
+}
+
 fn cmd_start(
     cwd: &Path,
     source: Option<String>,
@@ -179,8 +194,23 @@ fn cmd_start(
     let (manifest, briefing) = match prepared {
         Ok(v) => v,
         Err(e) => {
-            if into.is_some() {
-                let _ = std::fs::remove_dir_all(&dest); // -o로 새로 만든 폴더니 통째로 정리
+            // dest_nonempty가 false라는 건 -o로 새로 만든 폴더이거나(항상 새 폴더라 비어있었음),
+            // 원래 비어있던 cwd에 바로 풀었다는 뜻 -- 두 경우 다 지금 dest 안에 있는 건 전부
+            // 이번 실패한 클론이 만든 것뿐이라 통째로 지워도 안전하다. dest_nonempty가 true인
+            // 경우(cwd에 원래 뭔가 있었음)는 애초에 git::clone 단계에서 이미 실패해서 여기까지
+            // 오지 않는다 -- 그래도 방어적으로 조건을 남겨둔다(사용자의 기존 파일을 실수로
+            // 지우는 게 제일 위험한 실패 모드라서).
+            if !dest_nonempty {
+                if into.is_some() {
+                    // -o로 새로 만든 하위 폴더 -- 사용자의 cwd가 아니니 통째로 지워도 된다.
+                    let _ = std::fs::remove_dir_all(&dest);
+                } else {
+                    // dest == cwd. 사용자 셸이 지금 이 디렉터리 "안"에 있을 수 있으므로,
+                    // 디렉터리 자체를 지우면 셸이 삭제된 cwd에 남아 pwd/ls 등이 깨진다
+                    // (실제로 겪은 문제). 안은 비우되 폴더 자체는 남겨서, 시작하기 전과
+                    // 똑같이 "빈 폴더"로 돌아가게 한다.
+                    let _ = clear_dir_contents(&dest);
+                }
             }
             return Err(e);
         }
